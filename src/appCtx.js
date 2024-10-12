@@ -3,9 +3,9 @@ import React, { createContext, useState } from 'react';
 export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-  const [roomId, setRoomId] = useState('12345');
+  const [roomId, setRoomId] = useState(-1);
   const [roomSize, setRoomSize] = useState(2);
-  const [playerId, setPlayerId] = useState('player1');
+  const [playerId, setPlayerId] = useState(-1);
   const [leftCount, setLeftCount] = useState(0);
   const [rightCount, setRightCount] = useState(0);
 
