@@ -27,6 +27,23 @@
    6. 回到 2
 
 
+关于比赛时对数据库的更新：
+
+* 如果每次点击都更新数据库，则会导致数据库压力过大。那么需要一种方法来对数据进行周期性的更新。
+  * 由谁进行更新？何时进行更新？
+  * 由谁：可以投票或基于某个规则选出其中一个玩家进行更新。
+    * 如果投票：需要知道每个用户的id，那么这就需要在游戏开始的时候同步一次所有玩家信息。每次需要更新时，随机选择一个玩家，由票数最多的玩家进行更新操作。那么会存在一个新的问题：每个人都有掉线的风险，那么怎么规避选出来的人不在线而导致没更新？
+    * 如果基于规则：例如可以每个人来个随机数，由数字最大/最小的那个进行更新。那么做的好处在于只要产生了随机数就能代表用户在线。
+    * 所以最重要的问题是怎么确保更新者是在线的？或者说，怎么辨别人掉线了？
+    * ~~那么可以周期性的进行广播，说我在线。~~ 好的，supabase有个Presence可以办到这个。
+    * 那么现在问题解决了，无论是投票还是基于某种规则，都可以有一个确定的主体可以发送更新操作。
+  * 何时：可以选择一个期望时长，例如每秒更新一次。新的问题：
+    * 网络延迟：如果是固定更新周期，例如游戏开始每秒更新一次，则可以以游戏开始时间戳确定准确的更新时间点。
+      * 想到个极端例外：玩家可能在第1s更新了，可是由于网络延迟，导致服务器在第3s才收到更新操作，此时就不能将旧的数据写入进去。所以应该在数据库中记录最后更新时间戳，以免旧数据覆盖新数据。
+    * 设备性能：如果用户设备性能足够差，会导致操作不能及时处理和发出。所以在这点上，会存在每个人的时间尺度可能是不一样的情况。这个暂时不考虑。
+
+玩家掉线/刷新后如何恢复？
+
 ## 数据库
 
 ### user 表
@@ -34,7 +51,7 @@
 * 存放用户信息
 * `id` 主键 `int8`
 * `username` `text` 唯一的（按目前需求来说这样做可以使用户可以用相同的用户名重新登录，反正不需要密码，正常的项目中应该使用auth功能而非数据库中建立user表）
-* `create_at` 创建时间 `timestamptz`
+* `created_at` 创建时间 `timestamptz`
 
 ```sql
 create table
@@ -55,7 +72,7 @@ create table
 * `uid` 外键（`user.id`）
 * `is_winner` bool
 * `click_count` 点击次数 int4
-* `create_at` 创建时间 `timestamptz`
+* `created_at` 创建时间 `timestamptz`
 
 ```sql
 create table
@@ -79,7 +96,8 @@ create table
 * `win_threshold` 赢的数量（一边比一边多这么多就算赢，一般是人数*10） `int4`
 * `left_count` 左边的人点击总数 `int4` max(2^31 - 1)
 * `right_count` 右边的人点击总数 `int4` max(2^31 - 1)
-* `create_at` 创建时间 `timestamptz`
+* `updated_at` 更新发出时的毫秒时间戳 `int8`
+* `created_at` 创建时间 `timestamptz`
 
 ```sql
 create table
@@ -89,15 +107,32 @@ create table
     win_threshold integer not null,
     left_count integer not null,
     right_count integer not null,
+    updated_at bigint not null default '0'::bigint,
     created_at timestamp with time zone not null default now(),
     constraint room_pkey primary key (id),
     constraint room_id_key unique (id),
     constraint room_left_count_check check ((left_count < 1073741823)),
     constraint room_right_count_check check ((right_count < 1073741823))
   ) tablespace pg_default;
+
+create or replace function check_and_update_room()
+returns trigger as $$
+begin
+  if new.updated_at <= old.updated_at then
+    return null;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger
+  before_update_room before update
+on public.room
+for each row
+  execute function check_and_update_room();
 ```
 
-### room_user 表
+### user_room 表
 
 * 存放房间内用户信息，例如是否是观战还是正在游玩、玩家当前的点击数，用户/房间删除后自动删除
 * `uid` 主键 外键（`user.id`） delete cascade
@@ -108,15 +143,15 @@ create table
 
 ```sql
 create table
-  public.room_user (
-    id bigint not null,
-    rid bigint null,
+  public.user_room (
+    `uid` bigint not null,
+    rid bigint not null,
     click_count integer not null default 0,
     is_left boolean not null,
     is_player boolean not null default false,
-    constraint room_user_pkey primary key (id),
-    constraint room_user_id_key unique (id),
-    constraint room_user_id_fkey foreign key (id) references "user" (id) on delete cascade,
-    constraint room_user_rid_fkey foreign key (rid) references room (id) on delete cascade
+    constraint user_room_pkey primary key (id),
+    constraint user_room_id_key unique (id),
+    constraint user_room_id_fkey foreign key (id) references "user" (id) on delete cascade,
+    constraint user_room_rid_fkey foreign key (rid) references room (id) on delete cascade
   ) tablespace pg_default;
 ```

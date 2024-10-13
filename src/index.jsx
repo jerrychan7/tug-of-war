@@ -1,16 +1,19 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import { AppProvider } from './appCtx';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { AuthProvider } from './context/auth';
+import { GameCtxProvider } from './context/game';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <AppProvider>
-      <App />
-    </AppProvider>
+    <AuthProvider>
+      <GameCtxProvider>
+        <App />
+      </GameCtxProvider>
+    </AuthProvider>
   </React.StrictMode>
 );
 

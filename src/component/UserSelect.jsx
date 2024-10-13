@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/auth';
+import supabase from '../supabaseClient';
 
 /*
   onSelect: function
@@ -11,6 +13,8 @@ import React, { useState } from 'react';
 */
 
 const UserSelect = ({ onSelect, getHistory }) => {
+  const authCtx = useAuth();
+  const isLogin = authCtx.user !== null;
   const [gameOption, setGameOption] = useState(null);
   const [roomId, setRoomId] = useState('');
   const [history, setHistory] = useState(null);
@@ -23,10 +27,18 @@ const UserSelect = ({ onSelect, getHistory }) => {
     onSelect('join', roomId);
   };
 
-  const handleGetHistory = () => {
-    getHistory().then((data) => {
-      setHistory(data);
-    });
+  const handleGetHistory = async () => {
+    console.log(authCtx.user);
+    const { data, error } = await supabase.from('hist')
+      .select('*').eq('uid', authCtx.user.id)
+      .order('created_at', { ascending: false });
+    if (error && error.code !== 'PGRST116') {
+      console.error(error);
+      alert('Error');
+      return;
+    }
+    setHistory(data || null);
+    setGameOption('history');
   };
 
   return (
@@ -34,43 +46,46 @@ const UserSelect = ({ onSelect, getHistory }) => {
       <h2>请选择操作</h2>
       {!gameOption ? (
         <>
-          <button onClick={() => setGameOption('play')}>进行游戏</button>
-          <button onClick={() => handleGetHistory()}>查看历史</button>
+          { isLogin && <button onClick={() => authCtx.logout()}>Logout</button> }
+          <button onClick={() => setGameOption('play')}>Play</button>
+          <button onClick={() => handleGetHistory()}>History</button>
           {/* <button onClick={() => onSelect('watch')}>旁观战局</button> */}
         </>
       ) : gameOption === 'play' ? (
         <>
           <h3>请选择</h3>
-          <button onClick={() => setGameOption(null) }>返回</button>
+          <button onClick={() => setGameOption(null) }>Back</button>
           {/* 默认创建两人房间 */}
-          <button onClick={() => onSelect('create')}>创建房间</button>
-          <button onClick={() => setGameOption('join')}>加入房间</button>
+          <button onClick={() => onSelect('create')}>Create a Room</button>
+          <button onClick={() => setGameOption('join')}>Join a Room</button>
         </>
       ) : gameOption === 'join' ? (
         <>
-          <button onClick={() => setGameOption('play') }>返回</button>
-          <label>输入房间ID：</label>
+          <button onClick={() => setGameOption('play') }>Back</button>
+          <label>Room ID: </label>
           <input
             type="text"
             value={roomId}
             onChange={handleRoomIdChange}
           />
-          <button onClick={handleJoinRoom}>加入</button>
+          <button onClick={handleJoinRoom}>Join</button>
         </>
       ) : gameOption === 'history' ? (
         <>
-          <button onClick={() => setGameOption(null) }>返回</button>
-          <h3>查看历史</h3>
-          { history
-            ? (<ul>
-                { history.map((item) => <li>
-                  输赢：{item.isWinner}
-                  点击次数：{item.clickCounts}
-                  时间：{item.createdAt}
+          <button onClick={() => setGameOption(null) }>Back</button>
+          <h3>History</h3>
+          { history === null
+            ? <p>Loading...</p>
+            : history.length === 0
+            ? <p>No History</p>
+            : (<ul>{ history.map((item) =>
+                <li>
+                  { item.is_winner ? <span>WIN</span> : <span>LOSE</span> }
+                  <span>Clicked {item.click_count} time{item.click_count ? 's': ''}</span>
+                  <span>{item.created_at}</span>
                 </li>) }
               </ul>)
-            : (<p>获取中</p>)
-          }
+            }
         </>
       ) : null}
     </div>

@@ -3,9 +3,11 @@ import './App.css';
 import React, { useState } from 'react';
 import Login from './page/Login';
 import UserSelect from './component/UserSelect';
+import { useAuth } from './context/auth';
 
 function App() {
-
+  const authCtx = useAuth();
+  const isLogin = authCtx.user !== null;
   const [selection, setSelection] = useState(null);
 
   const handleSelect = (option, arg = '') => {
@@ -16,16 +18,17 @@ function App() {
 
 
   return (
-    <div className="App">
-      <Login />
-      {!selection ? (
-        <UserSelect onSelect={handleSelect} />
-      ) : (
-        <div>
-          <h2>你选择了: {selection}</h2>
-          {/* 根据选择的操作渲染不同的组件或页面 */}
-        </div>
-      )}
+    <div className="App">{ !isLogin
+      ? <Login />
+      : !selection ? (
+          <UserSelect onSelect={handleSelect} />
+        ) : (
+          <div>
+            <h2>你选择了: {selection}</h2>
+            {/* 根据选择的操作渲染不同的组件或页面 */}
+          </div>
+        )
+    }
     </div>
   );
 }
